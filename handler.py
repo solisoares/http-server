@@ -62,13 +62,15 @@ def return_response(conn, path: Path):
         header = response_header(status["ok"], path)
         body = list_dir_body(path)
 
-    elif path.is_file():
-        os.chdir(os.path.dirname(path))
-        header = response_header(status["ok"], path)
-        body = text_file_body(path)
-
     conn.sendall(header.encode("utf-8"))
     conn.sendall(body.encode("utf-8"))
+
+    if path.is_file():
+        os.chdir(os.path.dirname(path))
+        header = response_header(status["ok"], path)
+        conn.sendall(header.encode("utf-8"))
+        for chunk in text_file_body(path):
+            conn.sendall(chunk.encode("utf-8"))
 
 
 def response_header(status, path: Path):
@@ -126,7 +128,11 @@ def not_found_body(path: Path):
     return html
 
 
-def text_file_body(file):
-    with open(file, "r") as f:
-        content = f.read()
-    return content
+def text_file_body(filepath: Path):
+    """Yield chunk of a text file"""
+    with open(filepath, "r") as f:
+        while True:
+            chunk = f.read(1024)
+            yield chunk
+            if not chunk:
+                break
