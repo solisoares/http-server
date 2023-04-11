@@ -1,5 +1,11 @@
 import os
+from pathlib import Path
+from mimetypes import guess_type
+
 from collections import namedtuple
+
+
+status = {"ok": "200 OK", "not_found": "404 Not Found"}
 
 
 # HTTP Request
@@ -19,7 +25,8 @@ def parse_http_request_from_data(data):
     Returns:
         HTTPRequest: The request with http method, requested path and HTTP version
     """
-    request = HTTPRequest(*data.decode("utf-8").split()[:3])
+    method, path, version = data.decode("utf-8").split()[:3]
+    request = HTTPRequest(method, Path(path), version)
     return request
 
 
@@ -31,7 +38,6 @@ def handle_request(request: HTTPRequest, conn):
         conn: The Server-Client TCP connection
     """
     if request.method == "GET":
-        # print(request.method, request.path, request.version)
         print(f"requested path: {request.path}")
         return_response(conn, request.path)
 
@@ -44,23 +50,37 @@ def handle_request(request: HTTPRequest, conn):
         return
 
 
-def return_response(conn, path):
+def return_response(conn, path: Path):
     header, body = "", ""
-    if os.path.isdir(path):
+
+    if not path.exists():
+        header = response_header(status["not_found"], path)
+        body = not_found_body(path)
+
+    elif path.is_dir():
         os.chdir(path)
-        header = 'HTTP/1.0 200 OK\r\nContent-Type: text/html\r\n\r\n'
-        body = html_for_listing_directory(path)
-        
-    elif os.path.isfile(path):
+        header = response_header(status["ok"], path)
+        body = list_dir_body(path)
+
+    elif path.is_file():
         os.chdir(os.path.dirname(path))
-        header = ''
-        body = text_file_content(path)
+        header = response_header(status["ok"], path)
+        body = text_file_body(path)
 
-    response = header + body
-    conn.sendall(response.encode('utf-8'))
+    conn.sendall(header.encode("utf-8"))
+    conn.sendall(body.encode("utf-8"))
 
 
-def html_for_listing_directory(directory):
+def response_header(status, path: Path):
+    content_type, _ = guess_type(path)
+    header = f"HTTP/1.0 {status}\r\n"
+    if content_type:
+        header += f"Content-Type: {content_type}; charset=utf-8\r\n"
+    header += "\r\n"
+    return header
+
+
+def list_dir_body(directory: Path):
     """Generates HTML for a directory listing
 
     Args:
@@ -68,11 +88,10 @@ def html_for_listing_directory(directory):
     """
     entries = ""
 
-    for entry in sorted(os.listdir(directory)):
-        _entry = directory + "/" + entry if directory != "/" else directory + entry
-        entries += f'<li><a href="{_entry}">{entry}/</a></li>'
+    for entry in sorted(list(directory.iterdir())):
+        entries += f'<li><a href="{directory/entry}">{entry.name}/</a></li>'
 
-    html = f'''
+    html = f"""
 <html>
     <head>
         <title>HTTP Server
@@ -85,11 +104,29 @@ def html_for_listing_directory(directory):
         <hr>
     </body>
 </html>
-'''
+"""
     return html
 
 
-def text_file_content(file):
+def not_found_body(path: Path):
+    """Generates HTML for path not found"""
+    html = f"""
+<html>
+    <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+        <title>Error response</title>
+    </head>
+    <body>
+        <h1>Error response</h1>
+        <p>Error code: 404</p>
+        <p>Message: Could not find the requested path: {path}</p>
+    </body>
+</html>
+"""
+    return html
+
+
+def text_file_body(file):
     with open(file, "r") as f:
         content = f.read()
     return content
