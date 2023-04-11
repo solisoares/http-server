@@ -2,6 +2,8 @@ import os
 from pathlib import Path
 from mimetypes import guess_type
 
+from html import escape as html_escape
+
 from collections import namedtuple
 
 
@@ -88,10 +90,12 @@ def list_dir_body(directory: Path):
     Args:
         directory (str): Directory to list
     """
-    entries = ""
+    entries = ""  # the filepaths of a directory list
 
     for entry in sorted(list(directory.iterdir())):
-        entries += f'<li><a href="{directory/entry}">{entry.name}/</a></li>'
+        # Replace special characters "&", "<" and ">" to HTML-safe sequences.
+        escaped_entry = Path(html_escape(str(entry)))
+        entries += f'<li><a href="{directory/entry}">{escaped_entry.name}/</a></li>'
 
     html = f"""
 <html>
