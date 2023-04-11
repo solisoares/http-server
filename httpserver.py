@@ -27,6 +27,9 @@ def serve(host=HOST, port=PORT):
             conn, addr = server_socket.accept()  # (host, port)
             with conn:
                 data = conn.recv(1024)
+                if not data:
+                    print("Received empty data. Awaiting new connection...")
+                    continue
                 request = parse_http_request_from_data(data)
                 handle_request(request, conn)
 
