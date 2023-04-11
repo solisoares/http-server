@@ -1,6 +1,8 @@
 # http server
 
 import socket
+import os
+import argparse
 
 from handler import (
     parse_http_request_from_data,
@@ -33,5 +35,20 @@ def bind(server_socket, host, port):
     server_socket.bind((host, port))
 
 
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--host",
+        type=str,
+        default=HOST,
+        help="specify alternate host [default: localhost (127.0.0.1)]",
+    )
+    parser.add_argument(
+        "--port", type=int, default=PORT, help="specify alternate port [default: 65432]"
+    )
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
-    serve()
+    args = parse_args()
+    serve(args.host, args.port)
