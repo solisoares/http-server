@@ -71,8 +71,8 @@ def return_response(conn, path: Path):
         os.chdir(os.path.dirname(path))
         header = response_header(status["ok"], path)
         conn.sendall(header.encode("utf-8"))
-        for chunk in text_file_body(path):
-            conn.sendall(chunk.encode("utf-8"))
+        for chunk in file_content(path):
+            conn.sendall(chunk)
 
 
 def response_header(status, path: Path):
@@ -132,9 +132,9 @@ def not_found_body(path: Path):
     return html
 
 
-def text_file_body(filepath: Path):
-    """Yield chunk of a text file"""
-    with open(filepath, "r") as f:
+def file_content(filepath: Path):
+    """Yield chunk of a file"""
+    with open(filepath, "rb") as f:
         while True:
             chunk = f.read(1024)
             yield chunk
