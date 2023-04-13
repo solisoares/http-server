@@ -11,167 +11,144 @@ from collections import namedtuple
 status = {"ok": "200 OK", "not_found": "404 Not Found"}
 
 
-# HTTP Request
-# Contains:
-#     METHOD: GET, POST...
-#     PATH: filepath to directory, text file, binaries ...
-#     VERSION: HTTP version
-HTTPRequest = namedtuple("HTTPRequest", ["method", "path", "version"])
+class Handler:
+    def __init__(self, root_dir: Path) -> None:
+        self.root_dir = root_dir
 
+    def handle_request(self, raw_request: bytes, conn):
+        """Handle an HTTP request
 
-def parse_http_request_from_data(data):
-    """Parse the first line of an http request from received data
+        Args:
+            raw_request (bytes): The raw request
+            conn: The Server-Client TCP connection
+        """
+        method, path, version = raw_request.decode("utf-8").split()[:3]
+        path = self.handled_requested_path(Path(path))
 
-    Args:
-        data (binary str): data sent from client
+        if method == "GET":
+            print(f"requested path: {path}")
+            self.return_response(conn, path)
 
-    Returns:
-        HTTPRequest: The request with http method, requested path and HTTP version
-    """
-    method, path, version = data.decode("utf-8").split()[:3]
-    request = HTTPRequest(method, Path(path), version)
-    return request
+        elif method != "GET":
+            print("Not an HTTP GET request")
+            return
 
+        else:
+            print("Not an HTTP request")
+            return
 
-def handle_request(root_dir: Path, request: HTTPRequest, conn):
-    """Handle an HTTP request
+    def handled_requested_path(self, requested: Path):
+        """Retrieve a handled version of the requested path
 
-    Args:
-        root_dir (Path): The root directory for the server
-        request (HTTPRequest): The HTTP request
-        conn: The Server-Client TCP connection
-    """
-    # The quoted url path must be unquoted to use in OS operations
-    # Example: the requested path "t%C3%A9st" is the quoted version of "tést",
-    # but to perform OS operations with this path we need it in its
-    # orignal form "tést", thus it is unquoted.
-    path = Path(unquote(str(handled_requested_path(root_dir, request.path))))
+        Args:
+            root_dir (Path): The root directory for the server
+            requested (Path): The requested path
 
-    if request.method == "GET":
-        print(f"requested path: {path}")
-        return_response(conn, path)
+        Returns:
+            Path: The handled requested path
+        """
+        if requested == Path("/"):
+            handled = self.root_dir
+        else:
+            handled = self.root_dir / requested
 
-    elif request.method != "GET":
-        print("Not an HTTP GET request")
-        return
+        # The quoted url path must be unquoted to use in OS operations
+        # Example: the requested path "t%C3%A9st" is the quoted version of "tést",
+        # but to perform OS operations with this path we need it in its
+        # orignal form "tést", thus it is unquoted.
+        handled = Path(unquote(str(handled)))
 
-    else:
-        print("Not an HTTP request")
-        return
+        return handled
 
+    def return_response(self, conn, path: Path):
+        header, body = "", ""
 
-def handled_requested_path(root_dir: Path, requested: Path):
-    """Retrieve a handled version of the requested path
+        if not path.exists():
+            header = self.response_header(status["not_found"], path)
+            body = self.not_found_body(path)
 
-    Correctly append the requested path to the root directory
+        elif path.is_dir():
+            header = self.response_header(status["ok"], path)
+            body = self.list_dir_body(path)
 
-    Args:
-        root_dir (Path): The root directory for the server
-        requested (Path): The requested path
-
-    Returns:
-        Path: The handled requested path
-    """
-    if requested == Path("/"):
-        handled = root_dir
-    else:
-        handled = root_dir / requested
-    return handled
-
-
-def return_response(conn, path: Path):
-    header, body = "", ""
-
-    if not path.exists():
-        header = response_header(status["not_found"], path)
-        body = not_found_body(path)
-
-    elif path.is_dir():
-        header = response_header(status["ok"], path)
-        body = list_dir_body(path)
-
-    conn.sendall(header.encode("utf-8"))
-    conn.sendall(body.encode("utf-8"))
-
-    if path.is_file():
-        header = response_header(status["ok"], path)
         conn.sendall(header.encode("utf-8"))
-        for chunk in file_content(path):
-            conn.sendall(chunk)
+        conn.sendall(body.encode("utf-8"))
 
+        if path.is_file():
+            header = self.response_header(status["ok"], path)
+            conn.sendall(header.encode("utf-8"))
+            for chunk in self.file_content(path):
+                conn.sendall(chunk)
 
-def response_header(status, path: Path):
-    content_type, _ = guess_type(path)
-    header = f"HTTP/1.0 {status}\r\n"
-    if path.is_dir():
-        header += f"Content-Type: text/html; charset=utf-8\r\n"
-    elif content_type:  # it is necessarily a file
-        header += f"Content-Type: {content_type}; charset=utf-8\r\n"
-    header += "\r\n"
-    return header
+    def response_header(self, status, path: Path):
+        content_type, _ = guess_type(path)
+        header = f"HTTP/1.0 {status}\r\n"
+        if path.is_dir():
+            header += f"Content-Type: text/html; charset=utf-8\r\n"
+        elif content_type:  # it is necessarily a file
+            header += f"Content-Type: {content_type}; charset=utf-8\r\n"
+        header += "\r\n"
+        return header
 
+    def list_dir_body(self, directory: Path):
+        """Generates HTML for a directory listing
 
-def list_dir_body(directory: Path):
-    """Generates HTML for a directory listing
+        Args:
+            directory (str): Directory to list
+        """
+        entries = ""  # the filepaths of a directory list
 
-    Args:
-        directory (str): Directory to list
-    """
-    entries = ""  # the filepaths of a directory list
+        for entry in sorted(list(directory.iterdir())):
+            # Replace special characters "&", "<" and ">" to HTML-safe sequences for rendering
+            escaped_entry = Path(html_escape(str(entry)))
 
-    for entry in sorted(list(directory.iterdir())):
-        # Replace special characters "&", "<" and ">" to HTML-safe sequences for rendering
-        escaped_entry = Path(html_escape(str(entry)))
+            # The unquoted OS paths (for example "tést") must be quoted
+            # to be a valid URL ("t%C3%A9st")
+            quoted_entry = Path(quote(str(entry)))
 
-        # The unquoted OS paths (for example "tést") must be quoted
-        # to be a valid URL ("t%C3%A9st")
-        quoted_entry = Path(quote(str(entry)))
+            # Final slash for directories only
+            final_slash = "/" if escaped_entry.is_dir() else ""
 
-        # Final slash for directories only
-        final_slash = "/" if escaped_entry.is_dir() else ""
+            entries += f'<li><a href="{directory/quoted_entry}">{escaped_entry.name}{final_slash}</a></li>'
 
-        entries += f'<li><a href="{directory/quoted_entry}">{escaped_entry.name}{final_slash}</a></li>'
+        html = f"""
+            <html>
+                <head>
+                    <title>HTTP Server
+                    </title>
+                </head>
+                <body>
+                    <h1>Directory listing for {directory}</h1>
+                    <hr>
+                    <ul>{entries}</ul>
+                    <hr>
+                </body>
+            </html>
+            """
+        return html
 
-    html = f"""
-<html>
-    <head>
-        <title>HTTP Server
-        </title>
-    </head>
-    <body>
-        <h1>Directory listing for {directory}</h1>
-        <hr>
-        <ul>{entries}</ul>
-        <hr>
-    </body>
-</html>
-"""
-    return html
+    def not_found_body(self, path: Path):
+        """Generates HTML for path not found"""
+        html = f"""
+            <html>
+                <head>
+                    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+                    <title>Error response</title>
+                </head>
+                <body>
+                    <h1>Error response</h1>
+                    <p>Error code: 404</p>
+                    <p>Message: Could not find the requested path: {path}</p>
+                </body>
+            </html>
+            """
+        return html
 
-
-def not_found_body(path: Path):
-    """Generates HTML for path not found"""
-    html = f"""
-<html>
-    <head>
-        <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-        <title>Error response</title>
-    </head>
-    <body>
-        <h1>Error response</h1>
-        <p>Error code: 404</p>
-        <p>Message: Could not find the requested path: {path}</p>
-    </body>
-</html>
-"""
-    return html
-
-
-def file_content(filepath: Path):
-    """Yield chunk of a file"""
-    with open(filepath, "rb") as f:
-        while True:
-            chunk = f.read(1024)
-            yield chunk
-            if not chunk:
-                break
+    def file_content(self, filepath: Path):
+        """Yield chunk of a file"""
+        with open(filepath, "rb") as f:
+            while True:
+                chunk = f.read(1024)
+                yield chunk
+                if not chunk:
+                    break
