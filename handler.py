@@ -3,6 +3,7 @@ from pathlib import Path
 from mimetypes import guess_type
 
 from html import escape as html_escape
+from urllib.parse import unquote, quote
 
 from collections import namedtuple
 
@@ -40,7 +41,11 @@ def handle_request(root_dir: Path, request: HTTPRequest, conn):
         request (HTTPRequest): The HTTP request
         conn: The Server-Client TCP connection
     """
-    path = handled_requested_path(root_dir, request.path)
+    # The quoted url path must be unquoted to use in OS operations
+    # Example: the requested path "t%C3%A9st" is the quoted version of "tést",
+    # but to perform OS operations with this path we need it in its
+    # orignal form "tést", thus it is unquoted.
+    path = Path(unquote(str(handled_requested_path(root_dir, request.path))))
 
     if request.method == "GET":
         print(f"requested path: {path}")
@@ -113,10 +118,17 @@ def list_dir_body(directory: Path):
     entries = ""  # the filepaths of a directory list
 
     for entry in sorted(list(directory.iterdir())):
-        # Replace special characters "&", "<" and ">" to HTML-safe sequences.
+        # Replace special characters "&", "<" and ">" to HTML-safe sequences for rendering
         escaped_entry = Path(html_escape(str(entry)))
+
+        # The unquoted OS paths (for example "tést") must be quoted
+        # to be a valid URL ("t%C3%A9st")
+        quoted_entry = Path(quote(str(entry)))
+
+        # Final slash for directories only
         final_slash = "/" if escaped_entry.is_dir() else ""
-        entries += f'<li><a href="{directory/entry}">{escaped_entry.name}{final_slash}</a></li>'
+
+        entries += f'<li><a href="{directory/quoted_entry}">{escaped_entry.name}{final_slash}</a></li>'
 
     html = f"""
 <html>
