@@ -103,7 +103,9 @@ def return_response(conn, path: Path):
 def response_header(status, path: Path):
     content_type, _ = guess_type(path)
     header = f"HTTP/1.0 {status}\r\n"
-    if content_type:
+    if path.is_dir():
+        header += f"Content-Type: text/html; charset=utf-8\r\n"
+    elif content_type:  # it is necessarily a file
         header += f"Content-Type: {content_type}; charset=utf-8\r\n"
     header += "\r\n"
     return header
