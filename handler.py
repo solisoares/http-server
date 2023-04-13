@@ -32,16 +32,19 @@ def parse_http_request_from_data(data):
     return request
 
 
-def handle_request(request: HTTPRequest, conn):
+def handle_request(root_dir: Path, request: HTTPRequest, conn):
     """Handle an HTTP request
 
     Args:
+        root_dir (Path): The root directory for the server
         request (HTTPRequest): The HTTP request
         conn: The Server-Client TCP connection
     """
+    path = handled_requested_path(root_dir, request.path)
+
     if request.method == "GET":
-        print(f"requested path: {request.path}")
-        return_response(conn, request.path)
+        print(f"requested path: {path}")
+        return_response(conn, path)
 
     elif request.method != "GET":
         print("Not an HTTP GET request")
@@ -52,6 +55,25 @@ def handle_request(request: HTTPRequest, conn):
         return
 
 
+def handled_requested_path(root_dir: Path, requested: Path):
+    """Retrieve a handled version of the requested path
+
+    Correctly append the requested path to the root directory
+
+    Args:
+        root_dir (Path): The root directory for the server
+        requested (Path): The requested path
+
+    Returns:
+        Path: The handled requested path
+    """
+    if requested == Path("/"):
+        handled = root_dir
+    else:
+        handled = root_dir / requested
+    return handled
+
+
 def return_response(conn, path: Path):
     header, body = "", ""
 
@@ -60,7 +82,6 @@ def return_response(conn, path: Path):
         body = not_found_body(path)
 
     elif path.is_dir():
-        os.chdir(path)
         header = response_header(status["ok"], path)
         body = list_dir_body(path)
 
@@ -68,7 +89,6 @@ def return_response(conn, path: Path):
     conn.sendall(body.encode("utf-8"))
 
     if path.is_file():
-        os.chdir(os.path.dirname(path))
         header = response_header(status["ok"], path)
         conn.sendall(header.encode("utf-8"))
         for chunk in file_content(path):
