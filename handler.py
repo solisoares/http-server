@@ -115,7 +115,8 @@ def list_dir_body(directory: Path):
     for entry in sorted(list(directory.iterdir())):
         # Replace special characters "&", "<" and ">" to HTML-safe sequences.
         escaped_entry = Path(html_escape(str(entry)))
-        entries += f'<li><a href="{directory/entry}">{escaped_entry.name}/</a></li>'
+        final_slash = "/" if escaped_entry.is_dir() else ""
+        entries += f'<li><a href="{directory/entry}">{escaped_entry.name}{final_slash}</a></li>'
 
     html = f"""
 <html>
