@@ -1,11 +1,8 @@
-import os
 from pathlib import Path
 from mimetypes import guess_type
 
 from html import escape as html_escape
 from urllib.parse import unquote, quote
-
-from collections import namedtuple
 
 
 status = {"ok": "200 OK", "not_found": "404 Not Found"}
@@ -50,7 +47,7 @@ class Handler:
         if requested == Path("/"):
             handled = self.root_dir
         else:
-            handled = self.root_dir / requested
+            handled = (self.root_dir / Path(str(requested).lstrip("/"))).resolve()
 
         # The quoted url path must be unquoted to use in OS operations
         # Example: the requested path "t%C3%A9st" is the quoted version of "tést",
@@ -109,7 +106,14 @@ class Handler:
             # Final slash for directories only
             final_slash = "/" if escaped_entry.is_dir() else ""
 
-            entries += f'<li><a href="{directory/quoted_entry}">{escaped_entry.name}{final_slash}</a></li>'
+            entries += f'<li><a href="{quoted_entry.name}{final_slash}">{escaped_entry.name}{final_slash}</a></li>'
+
+        escaped_directory = Path(html_escape(str(directory)))
+        escaped_directory = (
+            str(directory).split(str(self.root_dir))[-1]
+            if directory != self.root_dir
+            else "/"
+        )
 
         html = f"""
             <html>
@@ -118,7 +122,7 @@ class Handler:
                     </title>
                 </head>
                 <body>
-                    <h1>Directory listing for {directory}</h1>
+                    <h1>Directory listing for {escaped_directory}</h1>
                     <hr>
                     <ul>{entries}</ul>
                     <hr>
