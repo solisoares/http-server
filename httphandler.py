@@ -66,17 +66,15 @@ class HTTPHandler:
         if not path.exists():
             header = self.response_header(StatusCode.NOT_FOUND, path)
             body = self.not_found_body(path)
-
+            conn.sendall(header + body)
         elif path.is_dir():
             header = self.response_header(StatusCode.OK, path)
             body = self.list_dir_body(path)
-
-        conn.sendall(header.encode("utf-8"))
-        conn.sendall(body.encode("utf-8"))
+            conn.sendall(header + body)
 
         if path.is_file():
             header = self.response_header(StatusCode.OK, path)
-            conn.sendall(header.encode("utf-8"))
+            conn.sendall(header)
             for chunk in self.file_content(path):
                 conn.sendall(chunk)
 
@@ -88,7 +86,7 @@ class HTTPHandler:
         elif content_type:  # it is necessarily a file
             header += f"Content-Type: {content_type}; charset=utf-8\r\n"
         header += "\r\n"
-        return header
+        return header.encode("utf-8")
 
     def list_dir_body(self, directory: Path):
         """Generates HTML for a directory listing
@@ -132,7 +130,7 @@ class HTTPHandler:
                 </body>
             </html>
             """
-        return html
+        return html.encode("utf-8")
 
     def not_found_body(self, path: Path):
         """Generates HTML for path not found"""
@@ -149,7 +147,7 @@ class HTTPHandler:
                 </body>
             </html>
             """
-        return html
+        return html.encode("utf-8")
 
     def file_content(self, filepath: Path):
         """Yield chunk of a file"""
