@@ -7,6 +7,8 @@ import argparse
 
 from httphandler import HTTPHandler
 
+import signal
+import sys
 
 DIR_CALLED = Path(os.getcwd())
 HOST = "127.0.0.1"  # localhost
@@ -58,6 +60,12 @@ def parse_args():
     return parser.parse_args()
 
 
+def signal_handler(signal, frame):
+    print("\nExiting...")
+    sys.exit(0)
+
+
 if __name__ == "__main__":
+    signal.signal(signal.SIGINT, signal_handler)
     args = parse_args()
     serve(Path(args.dir), args.host, args.port)
