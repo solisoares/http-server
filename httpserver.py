@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 import argparse
 
-from handler import Handler
+from httphandler import HTTPHandler
 
 
 DIR_CALLED = Path(os.getcwd())
@@ -23,7 +23,7 @@ def serve(root_dir=DIR_CALLED, host=HOST, port=PORT):
 
         print(f"Serving HTTP on {host} port {port} (http://{host}:{port}/) ...")
 
-        handler = Handler(root_dir)
+        handler = HTTPHandler(root_dir)
         while True:
             conn, addr = server_socket.accept()  # (host, port)
             with conn:

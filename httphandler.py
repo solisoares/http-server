@@ -4,11 +4,15 @@ from mimetypes import guess_type
 from html import escape as html_escape
 from urllib.parse import unquote, quote
 
+from enum import Enum
 
-status = {"ok": "200 OK", "not_found": "404 Not Found"}
+
+class StatusCode(Enum):
+    OK = "200 OK"
+    NOT_FOUND = "404 Not Found"
 
 
-class Handler:
+class HTTPHandler:
     def __init__(self, root_dir: Path) -> None:
         self.root_dir = root_dir
 
@@ -20,7 +24,7 @@ class Handler:
             conn: The Server-Client TCP connection
         """
         method, path, version = raw_request.decode("utf-8").split()[:3]
-        path = self.handled_requested_path(Path(path))
+        path = self.handle_path(Path(path))
 
         if method == "GET":
             print(f"requested path: {path}")
@@ -34,52 +38,51 @@ class Handler:
             print("Not an HTTP request")
             return
 
-    def handled_requested_path(self, requested: Path):
+    def handle_path(self, req_path: Path):
         """Retrieve a handled version of the requested path
 
         Args:
-            root_dir (Path): The root directory for the server
-            requested (Path): The requested path
+            req_path (Path): The requested path
 
         Returns:
             Path: The handled requested path
         """
-        if requested == Path("/"):
-            handled = self.root_dir
+        if req_path == Path("/"):
+            handled_path = self.root_dir
         else:
-            handled = (self.root_dir / Path(str(requested).lstrip("/"))).resolve()
+            handled_path = (self.root_dir / Path(str(req_path).lstrip("/"))).resolve()
 
         # The quoted url path must be unquoted to use in OS operations
         # Example: the requested path "t%C3%A9st" is the quoted version of "tést",
         # but to perform OS operations with this path we need it in its
         # orignal form "tést", thus it is unquoted.
-        handled = Path(unquote(str(handled)))
+        handled_path = Path(unquote(str(handled_path)))
 
-        return handled
+        return handled_path
 
     def return_response(self, conn, path: Path):
         header, body = "", ""
 
         if not path.exists():
-            header = self.response_header(status["not_found"], path)
+            header = self.response_header(StatusCode.NOT_FOUND, path)
             body = self.not_found_body(path)
 
         elif path.is_dir():
-            header = self.response_header(status["ok"], path)
+            header = self.response_header(StatusCode.OK, path)
             body = self.list_dir_body(path)
 
         conn.sendall(header.encode("utf-8"))
         conn.sendall(body.encode("utf-8"))
 
         if path.is_file():
-            header = self.response_header(status["ok"], path)
+            header = self.response_header(StatusCode.OK, path)
             conn.sendall(header.encode("utf-8"))
             for chunk in self.file_content(path):
                 conn.sendall(chunk)
 
-    def response_header(self, status, path: Path):
+    def response_header(self, status_code: StatusCode, path: Path):
         content_type, _ = guess_type(path)
-        header = f"HTTP/1.0 {status}\r\n"
+        header = f"HTTP/1.0 {status_code.value}\r\n"
         if path.is_dir():
             header += f"Content-Type: text/html; charset=utf-8\r\n"
         elif content_type:  # it is necessarily a file
