@@ -1,26 +1,24 @@
-# http server
-
-import socket
-import os
-from pathlib import Path
 import argparse
+import os
+import signal
+import socket
+import sys
+from pathlib import Path
 
 from httphandler import HTTPHandler
 
-import signal
-import sys
 
 DIR_CALLED = Path(os.getcwd())
 HOST = "127.0.0.1"  # localhost
 PORT = 65432
 
 
-def serve(root_dir=DIR_CALLED, host=HOST, port=PORT):
+def serve(*, root_dir, host, port):
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
     with server_socket:
-        bind(server_socket, host, port)
+        server_socket.bind((host, port))
         server_socket.listen()
 
         print(f"Serving HTTP on {host} port {port} (http://{host}:{port}/) ...")
@@ -34,10 +32,6 @@ def serve(root_dir=DIR_CALLED, host=HOST, port=PORT):
                     print("Received empty data. Awaiting new connection...")
                     continue
                 handler.handle_request(raw_request, conn)
-
-
-def bind(server_socket, host, port):
-    server_socket.bind((host, port))
 
 
 def parse_args():
@@ -68,4 +62,4 @@ def signal_handler(signal, frame):
 if __name__ == "__main__":
     signal.signal(signal.SIGINT, signal_handler)
     args = parse_args()
-    serve(Path(args.dir), args.host, args.port)
+    serve(root_dir=Path(args.dir), host=args.host, port=args.port)

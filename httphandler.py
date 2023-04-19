@@ -1,10 +1,8 @@
-from pathlib import Path
-from mimetypes import guess_type
-
-from html import escape as html_escape
-from urllib.parse import unquote, quote
-
 from enum import Enum
+from html import escape as html_escape
+from mimetypes import guess_type
+from pathlib import Path
+from urllib.parse import unquote, quote
 
 
 class StatusCode(Enum):
