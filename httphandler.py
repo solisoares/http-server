@@ -45,17 +45,15 @@ class HTTPHandler:
         Returns:
             Path: The handled requested path
         """
-        if req_path == Path("/"):
-            handled_path = self.root_dir
-        else:
-            handled_path = (self.root_dir / Path(str(req_path).lstrip("/"))).resolve()
-
-        # The quoted url path must be unquoted to use in OS operations
-        # Example: the requested path "t%C3%A9st" is the quoted version of "tést",
-        # but to perform OS operations with this path we need it in its
-        # orignal form "tést", thus it is unquoted.
-        handled_path = Path(unquote(str(handled_path)))
-
+        # The requested path must have no leadind slash and be unquoted.
+        # - Remove leading slash to join paths correctly.
+        # - The quoted url path must be unquoted to use in OS operations
+        #   Example: the requested path "t%C3%A9st" is the quoted version of "tést",
+        #   but to perform OS operations with this path we need it in its
+        #   original form "tést", thus it is unquoted.
+        req_path = Path(unquote(str(req_path).lstrip("/")))
+        
+        handled_path = (self.root_dir / req_path).resolve()
         return handled_path
 
     def return_response(self, conn, path: Path):

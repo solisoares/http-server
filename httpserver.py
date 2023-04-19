@@ -62,4 +62,4 @@ def signal_handler(signal, frame):
 if __name__ == "__main__":
     signal.signal(signal.SIGINT, signal_handler)
     args = parse_args()
-    serve(root_dir=Path(args.dir), host=args.host, port=args.port)
+    serve(root_dir=Path(args.dir).resolve(), host=args.host, port=args.port)
