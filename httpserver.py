@@ -27,11 +27,14 @@ def serve(*, root_dir, host, port):
         while True:
             conn, addr = server_socket.accept()  # (host, port)
             with conn:
-                raw_request = conn.recv(1024)
-                if not raw_request:
+                buffer = b""  # buffer for raw request
+                while b"\r\n\r\n" not in buffer:
+                    chunk = conn.recv(1024)
+                    buffer += chunk
+                if not buffer:
                     print("Received empty data. Awaiting new connection...")
                     continue
-                handler.handle_request(raw_request, conn)
+                handler.handle_request(buffer, conn)
 
 
 def parse_args():
