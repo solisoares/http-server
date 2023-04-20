@@ -1,13 +1,25 @@
+import datetime
+import platform
 from enum import Enum
 from html import escape as html_escape
 from mimetypes import guess_type
 from pathlib import Path
+from typing import Union
 from urllib.parse import unquote, quote
 
 
 class StatusCode(Enum):
+    pass
+
+
+class SuccessfulStatusCode(StatusCode):
     OK = "200 OK"
+
+
+class ClientErrorStatusCode(StatusCode):
+    BAD_REQUEST = "400 Bad Request"
     NOT_FOUND = "404 Not Found"
+    MET_NOT_AL = "405 Method Not Allowed"
 
 
 class HTTPHandler:
@@ -21,20 +33,23 @@ class HTTPHandler:
             raw_request (bytes): The raw request
             conn: The Server-Client TCP connection
         """
-        method, path, version = raw_request.decode("utf-8").split()[:3]
-        path = self.handle_path(Path(path))
+        method, req_path, version = raw_request.decode("utf-8").split()[:3]
+        req_path = self.handle_path(Path(req_path))
 
         if method == "GET":
-            print(f"requested path: {path}")
-            self.return_response(conn, path)
+            print(f"requested path: {req_path}")
+            if not req_path.exists():
+                self.send_client_error_response(conn, ClientErrorStatusCode.NOT_FOUND)
+            else:
+                self.send_successful_get_response(
+                    conn, SuccessfulStatusCode.OK, req_path
+                )
 
         elif method != "GET":
-            print("Not an HTTP GET request")
-            return
+            self.send_client_error_response(conn, ClientErrorStatusCode.MET_NOT_AL)
 
         else:
-            print("Not an HTTP request")
-            return
+            self.send_client_error_response(conn, ClientErrorStatusCode.BAD_REQUEST)
 
     def handle_path(self, req_path: Path):
         """Retrieve a handled version of the requested path
@@ -52,37 +67,66 @@ class HTTPHandler:
         #   but to perform OS operations with this path we need it in its
         #   original form "tést", thus it is unquoted.
         req_path = Path(unquote(str(req_path).lstrip("/")))
-        
+
         handled_path = (self.root_dir / req_path).resolve()
         return handled_path
 
-    def return_response(self, conn, path: Path):
-        header, body = "", ""
-
-        if not path.exists():
-            header = self.response_header(StatusCode.NOT_FOUND, path)
-            body = self.not_found_body(path)
-            conn.sendall(header + body)
-        elif path.is_dir():
-            header = self.response_header(StatusCode.OK, path)
-            body = self.list_dir_body(path)
-            conn.sendall(header + body)
-
-        if path.is_file():
-            header = self.response_header(StatusCode.OK, path)
-            conn.sendall(header)
-            for chunk in self.file_content(path):
-                conn.sendall(chunk)
-
-    def response_header(self, status_code: StatusCode, path: Path):
-        content_type, _ = guess_type(path)
+    def response_header(
+        self,
+        status_code: StatusCode,
+        content_type: Union[str, None],
+        content_length: int,
+        charset: Union[str, None] = None,
+    ):
         header = f"HTTP/1.0 {status_code.value}\r\n"
-        if path.is_dir():
-            header += f"Content-Type: text/html; charset=utf-8\r\n"
-        elif content_type:  # it is necessarily a file
-            header += f"Content-Type: {content_type}; charset=utf-8\r\n"
+        header += f"Server: MySimpleHTTPServer Python/{platform.python_version()}\r\n"
+        header += (
+            f"Date: {datetime.datetime.now().strftime('%a, %d %b %Y %H:%M:%S GMT')}\r\n"
+        )
+        if charset:
+            header += f"Content-Type: {content_type}; charset={charset}\r\n"
+        else:
+            header += f"Content-Type: {content_type}\r\n"
+        header += f"Content-Length': {str(content_length)}\r\n"
         header += "\r\n"
         return header.encode("utf-8")
+
+    def send_successful_get_response(
+        self, conn, status_code: SuccessfulStatusCode, req_path: Path
+    ):
+        if req_path.is_dir():
+            body = self.list_dir_body(req_path)
+            header = self.response_header(
+                status_code=status_code,
+                content_type="text/html",
+                content_length=len(body),
+                charset="utf-8",
+            )
+            conn.sendall(header + body)
+
+        elif req_path.is_file():
+            content_type, _ = guess_type(req_path)
+            charset = "utf-8" if (content_type and "text" in content_type) else None
+            header = self.response_header(
+                status_code=status_code,
+                content_type=content_type,
+                content_length=-1,  # TODO correctly make chunked transfer encoding
+                charset=charset,
+            )
+            conn.sendall(header)
+            for chunk in self.file_content(req_path):
+                conn.sendall(chunk)
+
+    def send_client_error_response(self, conn, status_code: ClientErrorStatusCode):
+        body = self.error_body(status_code)
+        header = self.response_header(
+            status_code=status_code,
+            content_type="text/html",
+            content_length=len(body),
+            charset="utf-8",
+        )
+        print(f"An ERROR occured. Status Code: {status_code.value}")
+        conn.sendall(header + body)
 
     def list_dir_body(self, directory: Path):
         """Generates HTML for a directory listing
@@ -128,18 +172,16 @@ class HTTPHandler:
             """
         return html.encode("utf-8")
 
-    def not_found_body(self, path: Path):
-        """Generates HTML for path not found"""
+    def error_body(self, status_code: StatusCode):
+        """Generates HTML body for errors"""
         html = f"""
             <html>
                 <head>
                     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-                    <title>Error response</title>
+                    <title>{status_code.value}</title>
                 </head>
                 <body>
-                    <h1>Error response</h1>
-                    <p>Error code: 404</p>
-                    <p>Message: Could not find the requested path: {path}</p>
+                    <h1>{status_code.value}</h1>
                 </body>
             </html>
             """
