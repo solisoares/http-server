@@ -75,7 +75,7 @@ class HTTPHandler:
         self,
         status_code: StatusCode,
         content_type: Union[str, None],
-        content_length: int,
+        content_length: Union[int, None],
         charset: Union[str, None] = None,
     ):
         header = f"HTTP/1.0 {status_code.value}\r\n"
@@ -87,7 +87,10 @@ class HTTPHandler:
             header += f"Content-Type: {content_type}; charset={charset}\r\n"
         else:
             header += f"Content-Type: {content_type}\r\n"
-        header += f"Content-Length': {str(content_length)}\r\n"
+        if content_length:
+            header += f"Content-Length': {str(content_length)}\r\n"
+        else:
+            header += f"Transfer-Encoding: chunked\r\n"
         header += "\r\n"
         return header.encode("utf-8")
 
@@ -110,11 +113,11 @@ class HTTPHandler:
             header = self.response_header(
                 status_code=status_code,
                 content_type=content_type,
-                content_length=-1,  # TODO correctly make chunked transfer encoding
+                content_length=None,
                 charset=charset,
             )
             conn.sendall(header)
-            for chunk in self.file_content(req_path):
+            for chunk in self.chunk_encoded_file_content(req_path):
                 conn.sendall(chunk)
 
     def send_client_error_response(self, conn, status_code: ClientErrorStatusCode):
@@ -187,11 +190,17 @@ class HTTPHandler:
             """
         return html.encode("utf-8")
 
-    def file_content(self, filepath: Path):
-        """Yield chunk of a file"""
+    def chunk_encoded_file_content(self, filepath: Path):
+        """Yield file chunk in Transfer-Encoding pattern
+
+        https://en.wikipedia.org/wiki/Chunked_transfer_encoding
+        https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Transfer-Encoding
+        """
         with open(filepath, "rb") as f:
             while True:
                 chunk = f.read(1024)
-                yield chunk
                 if not chunk:
                     break
+                hex_len_chunk = hex(len(chunk)).split("0x")[-1].upper()
+                yield f"{hex_len_chunk}".encode("ascii") + b"\r\n" + chunk + b"\r\n"
+            yield b"0\r\n\r\n"
