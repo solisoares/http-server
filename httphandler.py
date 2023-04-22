@@ -33,7 +33,8 @@ class HTTPHandler:
             raw_request (bytes): The raw request
             conn: The Server-Client TCP connection
         """
-        method, req_path, version = raw_request.decode("utf-8").split()[:3]
+        request_first_line = raw_request.split(b"\r\n")[0].decode("iso-8859-1")
+        method, req_path, version = request_first_line.split()
         req_path = self.handle_path(Path(req_path))
 
         if method == "GET":
