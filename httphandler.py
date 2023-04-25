@@ -1,5 +1,6 @@
 import datetime
 import platform
+import re
 from enum import Enum
 from html import escape as html_escape
 from mimetypes import guess_type
@@ -61,15 +62,20 @@ class HTTPHandler:
         Returns:
             Path: The handled requested path
         """
-        # The requested path must have no leadind slash and be unquoted.
-        # - Remove leading slash to join paths correctly.
-        # - The quoted url path must be unquoted to use in OS operations
-        #   Example: the requested path "t%C3%A9st" is the quoted version of "tést",
-        #   but to perform OS operations with this path we need it in its
-        #   original form "tést", thus it is unquoted.
-        req_path = Path(unquote(str(req_path).lstrip("/")))
 
-        handled_path = (self.root_dir / req_path).resolve()
+        # The requested path must:
+        # - Avoid higher directories traversal when something like "../" is used
+        # - Have no leading slash to join paths correctly.
+        # - Be unquoted.
+        #     The url path (that should be quoted) must be unquoted to use in OS 
+        #     operations. Example: the requested path "t%C3%A9st" is the quoted 
+        #     version of "tést", but to perform OS operations with this path we 
+        #     need it in its original form "tést", thus it is unquoted.
+        req_str = str(req_path)
+        req_str = re.sub("(/\\.{2,})+/?", "/", req_str)
+        req_str = unquote(req_str.lstrip("/"))
+
+        handled_path = (self.root_dir / Path(req_str)).resolve()
         return handled_path
 
     def response_header(
