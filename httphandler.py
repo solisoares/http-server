@@ -34,9 +34,13 @@ class HTTPHandler:
             raw_request (bytes): The raw request
             conn: The Server-Client TCP connection
         """
-        request_first_line = raw_request.split(b"\r\n")[0].decode("iso-8859-1")
-        method, req_path, version = request_first_line.split()
-        req_path = self.handle_path(Path(req_path))
+        try:
+            request_first_line = raw_request.split(b"\r\n")[0].decode("iso-8859-1")
+            method, req_path, version = request_first_line.split()
+            req_path = self.handle_path(Path(req_path))
+        except ValueError:  # problem to unpack the 3 values
+            self.send_client_error_response(conn, ClientErrorStatusCode.BAD_REQUEST)
+            return
 
         if method == "GET":
             print(f"requested path: {req_path}")
@@ -46,12 +50,8 @@ class HTTPHandler:
                 self.send_successful_get_response(
                     conn, SuccessfulStatusCode.OK, req_path
                 )
-
-        elif method != "GET":
-            self.send_client_error_response(conn, ClientErrorStatusCode.MET_NOT_AL)
-
         else:
-            self.send_client_error_response(conn, ClientErrorStatusCode.BAD_REQUEST)
+            self.send_client_error_response(conn, ClientErrorStatusCode.MET_NOT_AL)
 
     def handle_path(self, req_path: Path):
         """Retrieve a handled version of the requested path
@@ -67,9 +67,9 @@ class HTTPHandler:
         # - Avoid higher directories traversal when something like "../" is used
         # - Have no leading slash to join paths correctly.
         # - Be unquoted.
-        #     The url path (that should be quoted) must be unquoted to use in OS 
-        #     operations. Example: the requested path "t%C3%A9st" is the quoted 
-        #     version of "tést", but to perform OS operations with this path we 
+        #     The url path (that should be quoted) must be unquoted to use in OS
+        #     operations. Example: the requested path "t%C3%A9st" is the quoted
+        #     version of "tést", but to perform OS operations with this path we
         #     need it in its original form "tést", thus it is unquoted.
         req_str = str(req_path)
         req_str = re.sub("(/\\.{2,})+/?", "/", req_str)
