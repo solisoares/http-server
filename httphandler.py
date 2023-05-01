@@ -85,7 +85,7 @@ class HTTPHandler:
         content_length: Union[int, None],
         charset: Union[str, None] = None,
     ):
-        header = f"HTTP/1.0 {status_code.value}\r\n"
+        header = f"HTTP/1.1 {status_code.value}\r\n"
         header += f"Server: MySimpleHTTPServer Python/{platform.python_version()}\r\n"
         header += (
             f"Date: {datetime.datetime.now().strftime('%a, %d %b %Y %H:%M:%S GMT')}\r\n"
