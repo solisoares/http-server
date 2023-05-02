@@ -10,14 +10,7 @@ from urllib.parse import unquote, quote
 
 
 class StatusCode(Enum):
-    pass
-
-
-class SuccessfulStatusCode(StatusCode):
     OK = "200 OK"
-
-
-class ClientErrorStatusCode(StatusCode):
     BAD_REQUEST = "400 Bad Request"
     NOT_FOUND = "404 Not Found"
     MET_NOT_AL = "405 Method Not Allowed"
@@ -39,19 +32,17 @@ class HTTPHandler:
             method, req_path, version = request_first_line.split()
             req_path = self.handle_path(Path(req_path))
         except ValueError:  # problem to unpack the 3 values
-            self.send_client_error_response(conn, ClientErrorStatusCode.BAD_REQUEST)
+            self.send_response(conn, StatusCode.BAD_REQUEST)
             return
 
         if method == "GET":
             print(f"requested path: {req_path}")
             if not req_path.exists():
-                self.send_client_error_response(conn, ClientErrorStatusCode.NOT_FOUND)
+                self.send_response(conn, StatusCode.NOT_FOUND)
             else:
-                self.send_successful_get_response(
-                    conn, SuccessfulStatusCode.OK, req_path
-                )
+                self.send_response(conn, StatusCode.OK, req_path)
         else:
-            self.send_client_error_response(conn, ClientErrorStatusCode.MET_NOT_AL)
+            self.send_response(conn, StatusCode.MET_NOT_AL)
 
     def handle_path(self, req_path: Path):
         """Retrieve a handled version of the requested path
@@ -101,42 +92,42 @@ class HTTPHandler:
         header += "\r\n"
         return header.encode("utf-8")
 
-    def send_successful_get_response(
-        self, conn, status_code: SuccessfulStatusCode, req_path: Path
+    def send_response(
+        self, conn, status_code: StatusCode, req_path: Union[Path, None] = None
     ):
-        if req_path.is_dir():
-            body = self.list_dir_body(req_path)
+        if status_code == StatusCode.OK and req_path:
+            if req_path.is_dir():
+                body = self.list_dir_body(req_path)
+                header = self.response_header(
+                    status_code=status_code,
+                    content_type="text/html",
+                    content_length=len(body),
+                    charset="utf-8",
+                )
+                conn.sendall(header + body)
+
+            elif req_path.is_file():
+                content_type, _ = guess_type(req_path)
+                charset = "utf-8" if (content_type and "text" in content_type) else None
+                header = self.response_header(
+                    status_code=status_code,
+                    content_type=content_type,
+                    content_length=None,
+                    charset=charset,
+                )
+                conn.sendall(header)
+                self.send_file(conn, req_path)
+
+        else:
+            body = self.error_body(status_code)
             header = self.response_header(
                 status_code=status_code,
                 content_type="text/html",
                 content_length=len(body),
                 charset="utf-8",
             )
+            print(f"An ERROR occured. Status Code: {status_code.value}")
             conn.sendall(header + body)
-
-        elif req_path.is_file():
-            content_type, _ = guess_type(req_path)
-            charset = "utf-8" if (content_type and "text" in content_type) else None
-            header = self.response_header(
-                status_code=status_code,
-                content_type=content_type,
-                content_length=None,
-                charset=charset,
-            )
-            conn.sendall(header)
-            for chunk in self.chunk_encoded_file_content(req_path):
-                conn.sendall(chunk)
-
-    def send_client_error_response(self, conn, status_code: ClientErrorStatusCode):
-        body = self.error_body(status_code)
-        header = self.response_header(
-            status_code=status_code,
-            content_type="text/html",
-            content_length=len(body),
-            charset="utf-8",
-        )
-        print(f"An ERROR occured. Status Code: {status_code.value}")
-        conn.sendall(header + body)
 
     def list_dir_body(self, directory: Path):
         """Generates HTML for a directory listing
@@ -196,6 +187,10 @@ class HTTPHandler:
             </html>
             """
         return html.encode("utf-8")
+
+    def send_file(self, conn, filepath: Path):
+        for chunk in self.chunk_encoded_file_content(filepath):
+            conn.sendall(chunk)
 
     def chunk_encoded_file_content(self, filepath: Path):
         """Yield file chunk in Transfer-Encoding pattern
