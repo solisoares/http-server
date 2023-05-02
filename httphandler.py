@@ -66,8 +66,7 @@ class HTTPHandler:
         req_str = re.sub("(/\\.{2,})+/?", "/", req_str)
         req_str = unquote(req_str.lstrip("/"))
 
-        handled_path = (self.root_dir / Path(req_str)).resolve()
-        return handled_path
+        return (self.root_dir / Path(req_str)).resolve()
 
     def response_header(
         self,
@@ -88,7 +87,7 @@ class HTTPHandler:
         if content_length:
             header += f"Content-Length': {str(content_length)}\r\n"
         else:
-            header += f"Transfer-Encoding: chunked\r\n"
+            header += "Transfer-Encoding: chunked\r\n"
         header += "\r\n"
         return header.encode("utf-8")
 
@@ -138,7 +137,8 @@ class HTTPHandler:
         entries = ""  # the filepaths of a directory list
 
         for entry in sorted(list(directory.iterdir())):
-            # Replace special characters "&", "<" and ">" to HTML-safe sequences for rendering
+            # Replace special characters "&", "<" and ">" to HTML-safe
+            # sequences for rendering
             escaped_entry = Path(html_escape(str(entry)))
 
             # The unquoted OS paths (for example "tést") must be quoted
