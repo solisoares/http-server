@@ -1,4 +1,5 @@
 import datetime
+import os
 import platform
 import re
 from enum import Enum
@@ -12,6 +13,7 @@ from urllib.parse import unquote, quote
 class StatusCode(Enum):
     OK = "200 OK"
     BAD_REQUEST = "400 Bad Request"
+    FORBIDDEN = "403 Forbidden"
     NOT_FOUND = "404 Not Found"
     MET_NOT_AL = "405 Method Not Allowed"
 
@@ -31,6 +33,9 @@ class HTTPHandler:
             request_first_line = raw_request.split(b"\r\n")[0].decode("iso-8859-1")
             method, req_path, version = request_first_line.split()
             req_path = self.handle_path(Path(req_path))
+            if not os.access(str(req_path), os.R_OK):
+                self.send_response(conn, StatusCode.FORBIDDEN)
+                return
         except ValueError:  # problem to unpack the 3 values
             self.send_response(conn, StatusCode.BAD_REQUEST)
             return
