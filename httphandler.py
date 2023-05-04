@@ -33,7 +33,7 @@ class HTTPHandler:
             request_first_line = raw_request.split(b"\r\n")[0].decode("iso-8859-1")
             method, req_path, version = request_first_line.split()
             req_path = self.handle_path(Path(req_path))
-            if not os.access(str(req_path), os.R_OK):
+            if req_path.exists() and not os.access(str(req_path), os.R_OK):
                 self.send_response(conn, StatusCode.FORBIDDEN)
                 return
         except ValueError:  # problem to unpack the 3 values
