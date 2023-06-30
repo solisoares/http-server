@@ -1,2 +1,2 @@
-# HTTP Server Project - Alexandre
+# HTTP Server to serve files
 
